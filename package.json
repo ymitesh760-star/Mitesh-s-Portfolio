@@ -1,0 +1,10 @@
+{
+  "name": "mitesh-portfolio-workspace",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "npm --prefix \"Mitesh Yadav/portfolio\" run dev",
+    "build": "npm --prefix \"Mitesh Yadav/portfolio\" run build",
+    "preview": "npm --prefix \"Mitesh Yadav/portfolio\" run preview"
+  }
+}

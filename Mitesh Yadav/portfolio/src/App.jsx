@@ -2,9 +2,110 @@ import { useState, useEffect, useLayoutEffect, useRef, useCallback } from "react
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import Lenis from "lenis";
+import MonogramLogo from "./MonogramLogo";
 import "./index.css";
 
 gsap.registerPlugin(ScrollTrigger);
+
+// ============================================================================
+// CROSS-DEVICE TACTILE FEEDBACK SYSTEM
+// ============================================================================
+let audioCtx = null;
+
+function getAudioContext() {
+  if (typeof window === "undefined") return null;
+  if (!audioCtx) {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (AudioContextClass) {
+      try {
+        audioCtx = new AudioContextClass();
+      } catch (_) {}
+    }
+  }
+  if (audioCtx && audioCtx.state === "suspended") {
+    audioCtx.resume().catch(() => {});
+  }
+  return audioCtx;
+}
+
+function playTactileTick(volume = 0.055) {
+  try {
+    const ctx = getAudioContext();
+    if (!ctx || ctx.state !== "running") return;
+
+    const now = ctx.currentTime;
+
+    // High-precision mechanical tick synthesis (~35-45ms)
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    const filter = ctx.createBiquadFilter();
+
+    filter.type = "bandpass";
+    filter.frequency.setValueAtTime(1100, now);
+    filter.Q.setValueAtTime(2.5, now);
+
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(750, now);
+    osc.frequency.exponentialRampToValueAtTime(140, now + 0.035);
+
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.linearRampToValueAtTime(volume, now + 0.002);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.04);
+
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start(now);
+    osc.stop(now + 0.045);
+  } catch (_) {
+    // Fail silently if audio is blocked or unsupported
+  }
+}
+
+let lastTactileTime = 0;
+let lastTactileKey = "";
+
+function triggerTactileFeedback(key, element, soundEnabled = false) {
+  const now = performance.now();
+  // Cooldown & debounce: prevent duplicate rapid firings
+  if (now - lastTactileTime < 80 || (lastTactileKey === key && now - lastTactileTime < 350)) {
+    return;
+  }
+  lastTactileTime = now;
+  lastTactileKey = key;
+
+  const prefersReducedMotion =
+    typeof window !== "undefined" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  // 1. Mobile / Tablet Haptic Pulse (8–15ms)
+  if (!prefersReducedMotion && typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
+    try {
+      navigator.vibrate(10);
+    } catch (_) {}
+  }
+
+  // 2. Desktop Audio Feedback (Subtle mechanical tick)
+  if (soundEnabled && (!prefersReducedMotion || soundEnabled)) {
+    playTactileTick(0.055);
+  }
+
+  // 3. Desktop Visual Micro-Pulse (scale 1 -> 0.995 -> 1, translateY <= 1px)
+  if (element && !prefersReducedMotion) {
+    element.classList.remove("tactile-micro-pulse");
+    void element.offsetWidth; // Force reflow
+    element.classList.add("tactile-micro-pulse");
+    setTimeout(() => {
+      element.classList.remove("tactile-micro-pulse");
+    }, 160);
+  }
+
+  // 4. Custom Cursor Response
+  if (typeof window !== "undefined" && !prefersReducedMotion) {
+    window.dispatchEvent(new CustomEvent("portfolio-tactile"));
+  }
+}
 
 const skillCategories = [
   {
@@ -407,6 +508,8 @@ function CustomCursor() {
     let mouseY = window.innerHeight / 2;
     let ringX = mouseX;
     let ringY = mouseY;
+    let ringScale = 1;
+    let rafId;
 
     const handleMouseMove = (e) => {
       mouseX = e.clientX;
@@ -416,12 +519,13 @@ function CustomCursor() {
       }
     };
 
-    let rafId;
     const animateRing = () => {
       ringX += (mouseX - ringX) * 0.18;
       ringY += (mouseY - ringY) * 0.18;
+      ringScale += (1 - ringScale) * 0.14;
+
       if (cursorRingRef.current) {
-        cursorRingRef.current.style.transform = `translate3d(${ringX}px, ${ringY}px, 0)`;
+        cursorRingRef.current.style.transform = `translate3d(${ringX}px, ${ringY}px, 0) scale(${ringScale})`;
       }
       rafId = requestAnimationFrame(animateRing);
     };
@@ -443,14 +547,20 @@ function CustomCursor() {
       }
     };
 
+    const handleTactilePulse = () => {
+      ringScale = 1.25;
+    };
+
     document.addEventListener("mouseover", handleMouseOver);
     document.addEventListener("mouseout", handleMouseOut);
+    window.addEventListener("portfolio-tactile", handleTactilePulse);
 
     return () => {
       window.removeEventListener("mousemove", handleMouseMove);
       cancelAnimationFrame(rafId);
       document.removeEventListener("mouseover", handleMouseOver);
       document.removeEventListener("mouseout", handleMouseOut);
+      window.removeEventListener("portfolio-tactile", handleTactilePulse);
     };
   }, []);
 
@@ -472,13 +582,22 @@ function App() {
   const roleRef = useRef(null);
   const scrollIndicatorRef = useRef(null);
 
-  // About Section Refs
+  // Section Refs for scroll and tactile thresholds
   const aboutRef = useRef(null);
   const aboutKickerRef = useRef(null);
   const aboutHeadlineColRef = useRef(null);
   const aboutHeadlineRef = useRef(null);
   const aboutSideColRef = useRef(null);
   const aboutTableRef = useRef(null);
+
+  const skillsRef = useRef(null);
+  const skillsKickerRef = useRef(null);
+
+  const projectsRef = useRef(null);
+  const projectsKickerRef = useRef(null);
+
+  const certRef = useRef(null);
+  const certKickerRef = useRef(null);
 
   // Contact Section Refs
   const contactRef = useRef(null);
@@ -490,6 +609,53 @@ function App() {
   const emailCardRef = useRef(null);
   const socialGridRef = useRef(null);
   const footerRef = useRef(null);
+
+  const [soundEnabled, setSoundEnabled] = useState(() => {
+    try {
+      return localStorage.getItem("portfolio_tactile_sound") === "true";
+    } catch (_) {
+      return false;
+    }
+  });
+  const soundEnabledRef = useRef(soundEnabled);
+  soundEnabledRef.current = soundEnabled;
+
+  const toggleSound = () => {
+    setSoundEnabled((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem("portfolio_tactile_sound", next ? "true" : "false");
+      } catch (_) {}
+      if (next) {
+        getAudioContext();
+        playTactileTick(0.06);
+      }
+      return next;
+    });
+  };
+
+  // User gesture listener to unlock AudioContext
+  useEffect(() => {
+    const unlockAudio = () => {
+      getAudioContext();
+      window.removeEventListener("pointerdown", unlockAudio);
+      window.removeEventListener("keydown", unlockAudio);
+      window.removeEventListener("touchstart", unlockAudio);
+      window.removeEventListener("wheel", unlockAudio);
+    };
+
+    window.addEventListener("pointerdown", unlockAudio, { passive: true });
+    window.addEventListener("keydown", unlockAudio, { passive: true });
+    window.addEventListener("touchstart", unlockAudio, { passive: true });
+    window.addEventListener("wheel", unlockAudio, { passive: true });
+
+    return () => {
+      window.removeEventListener("pointerdown", unlockAudio);
+      window.removeEventListener("keydown", unlockAudio);
+      window.removeEventListener("touchstart", unlockAudio);
+      window.removeEventListener("wheel", unlockAudio);
+    };
+  }, []);
 
   const [copiedEmail, setCopiedEmail] = useState(false);
   const [activeCategory, setActiveCategory] = useState("all");
@@ -555,6 +721,7 @@ function App() {
   useLayoutEffect(() => {
     const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     let lenis = null;
+    let updateLenis = null;
 
     if (!prefersReducedMotion) {
       lenis = new Lenis({
@@ -566,7 +733,7 @@ function App() {
 
       lenis.on("scroll", ScrollTrigger.update);
 
-      const updateLenis = (time) => {
+      updateLenis = (time) => {
         lenis.raf(time * 1000);
       };
 
@@ -576,82 +743,126 @@ function App() {
 
     const ctx = gsap.context(() => {
       if (prefersReducedMotion) {
-        gsap.set(myRef.current, { opacity: 1, scale: 1, y: 0 });
-        gsap.set(identityRef.current, { opacity: 1, scale: 1, y: 0 });
-        gsap.set(scrollIndicatorRef.current, { opacity: 0 });
+        gsap.set(myRef.current, { opacity: 1, scale: 1, x: 0, y: 0 });
+        gsap.set(identityRef.current, { opacity: 1, scale: 1, x: 0, y: 0 });
+        if (scrollIndicatorRef.current) gsap.set(scrollIndicatorRef.current, { opacity: 0 });
         return;
       }
 
-      // Step 4: Initial GSAP States
+      // Initial GSAP States (Controlled, deterministic centering)
       gsap.set(myRef.current, {
         opacity: 1,
         scale: 1,
+        x: 0,
         y: 0,
       });
 
       gsap.set(identityRef.current, {
         opacity: 0,
-        scale: 0.9,
+        scale: 0.92,
+        x: 0,
         y: 0,
       });
 
-      gsap.set(scrollIndicatorRef.current, {
-        opacity: 1,
-        y: 0,
-      });
+      if (scrollIndicatorRef.current) {
+        gsap.set(scrollIndicatorRef.current, {
+          opacity: 1,
+          y: 0,
+        });
+      }
 
-      // Master Intro Timeline driven by GSAP ScrollTrigger Scrub
-      const tl = gsap.timeline({
-        scrollTrigger: {
-          trigger: introRef.current,
-          start: "top top",
-          end: "bottom bottom",
-          scrub: 1,
-          invalidateOnRefresh: true,
-        },
-      });
+      // Master Intro Timeline driven by single ScrollTrigger
+      const tl = gsap.timeline();
 
-      // 1. Scroll indicator fades out immediately
+      if (scrollIndicatorRef.current) {
+        tl.to(
+          scrollIndicatorRef.current,
+          {
+            opacity: 0,
+            duration: 0.4,
+            ease: "power1.out",
+          },
+          0
+        );
+      }
+
+      // 1. MY scales down & fades away smoothly
       tl.to(
-        scrollIndicatorRef.current,
+        myRef.current,
         {
           opacity: 0,
-          duration: 0.5,
-          ease: "power1.out",
+          scale: 0.82,
+          duration: 1.6,
+          ease: "power2.inOut",
+          onStart: () => {
+            triggerTactileFeedback("intro-my", myRef.current?.querySelector("span"), soundEnabledRef.current);
+          },
         },
         0
       )
-        // 2. PHASE 1 & 2: MY transitions out
+        // 2. MITESH YADAV + CREATIVE DEVELOPER smoothly fades in with natural overlap
         .to(
-          myRef.current,
+          identityRef.current,
           {
-            scale: 0.65,
-            opacity: 0,
-            duration: 1.5,
-            ease: "power2.inOut",
+            opacity: 1,
+            scale: 1,
+            duration: 1.3,
+            ease: "power2.out",
+            onStart: () => {
+              triggerTactileFeedback("intro-mitesh-yadav", nameRef.current, soundEnabledRef.current);
+            },
           },
-          0
+          0.7
         )
-        // 3. PHASE 3: Identity appears in the exact center
-        .to(identityRef.current, {
-          opacity: 1,
-          scale: 1,
-          duration: 1,
-          ease: "power2.out",
+        .call(() => {
+          triggerTactileFeedback("intro-creative-developer", roleRef.current, soundEnabledRef.current);
+        }, null, 2.0)
+        // 3. Holds centered for a clear, solid portion of scroll
+        .to({}, {
+          duration: 2.8,
         })
-        // 4. PHASE 4 (HOLD): Identity remains centered and visible
-        .to(identityRef.current, {
-          opacity: 1,
-          scale: 1,
-          duration: 3,
-        })
-        // 5. PHASE 5: Identity transitions out toward About
+        // 4. Smoothly fades away before About section enters
         .to(identityRef.current, {
           opacity: 0,
-          y: -40,
-          duration: 1,
-          ease: "power1.in",
+          scale: 0.98,
+          duration: 1.2,
+          ease: "power2.inOut",
         });
+
+      ScrollTrigger.create({
+        trigger: introRef.current,
+        start: "top top",
+        end: "bottom bottom",
+        scrub: 1,
+        animation: tl,
+      });
+
+      // Section Tactile Threshold ScrollTriggers (Crossing thresholds in both directions)
+      const sectionConfigs = [
+        { id: "about", ref: aboutRef, targetRef: aboutKickerRef },
+        { id: "skills", ref: skillsRef, targetRef: skillsKickerRef },
+        { id: "projects", ref: projectsRef, targetRef: projectsKickerRef },
+        { id: "certifications", ref: certRef, targetRef: certKickerRef },
+        { id: "contact", ref: contactRef, targetRef: contactKickerRef },
+      ];
+
+      sectionConfigs.forEach(({ id, ref, targetRef }) => {
+        if (ref.current) {
+          ScrollTrigger.create({
+            trigger: ref.current,
+            start: "top 62%",
+            end: "bottom 38%",
+            onEnter: () => {
+              const target = targetRef?.current || ref.current?.querySelector(".section-kicker") || ref.current;
+              triggerTactileFeedback(`section-${id}-enter`, target, soundEnabledRef.current);
+            },
+            onLeaveBack: () => {
+              const target = targetRef?.current || ref.current?.querySelector(".section-kicker") || ref.current;
+              triggerTactileFeedback(`section-${id}-leaveback`, target, soundEnabledRef.current);
+            },
+          });
+        }
+      });
 
       // ==========================================
       // SECTION 01: ABOUT SCROLL REVEALS
@@ -952,16 +1163,24 @@ function App() {
         );
       });
 
-      ScrollTrigger.refresh();
+      if (document.fonts) {
+        document.fonts.ready.then(() => {
+          ScrollTrigger.refresh();
+        });
+      } else {
+        ScrollTrigger.refresh();
+      }
     }, portfolioRef);
 
     return () => {
+      if (updateLenis) {
+        gsap.ticker.remove(updateLenis);
+      }
       if (lenis) {
         lenis.off("scroll", ScrollTrigger.update);
         lenis.destroy();
       }
       ctx.revert();
-      ScrollTrigger.getAll().forEach((trigger) => trigger.kill());
     };
   }, []);
 
@@ -978,8 +1197,20 @@ function App() {
       <header className="topbar">
         <div className="topbar-progress" style={{ width: `${scrollProgress}%` }} />
         
-        <div className="brand-group" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>
-          <span className="brand-mark">MY</span>
+        <div
+          className="brand-group"
+          onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+          role="button"
+          tabIndex={0}
+          aria-label="Mitesh Yadav — Return to top"
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }
+          }}
+        >
+          <MonogramLogo className="brand-logo-svg" width={48} height={28} />
           <span className="brand-sub">Mitesh Yadav</span>
         </div>
 
@@ -1026,6 +1257,21 @@ function App() {
           >
             Let&apos;s Talk
           </button>
+
+          <button
+            type="button"
+            onClick={toggleSound}
+            className={`sound-toggle-btn ${soundEnabled ? "active" : ""}`}
+            aria-label={soundEnabled ? "Disable tactile audio feedback" : "Enable tactile audio feedback"}
+            title={soundEnabled ? "Tactile Sound: On" : "Tactile Sound: Off"}
+          >
+            <span className="sound-toggle-icon" aria-hidden="true">
+              <span className="sound-wave-bar bar-1" />
+              <span className="sound-wave-bar bar-2" />
+              <span className="sound-wave-bar bar-3" />
+            </span>
+            <span className="sound-toggle-text">{soundEnabled ? "SOUND ON" : "SOUND OFF"}</span>
+          </button>
         </nav>
       </header>
 
@@ -1033,9 +1279,9 @@ function App() {
         {/* OPENING EXPERIENCE: Dedicated 400vh Scroll-Driven Staged Intro */}
         <section className="intro-scroll" ref={introRef} aria-label="Intro scroll stage">
           <div className="intro-stage" ref={stageRef}>
-            {/* STATE 1: Huge 'MY' Centered Mark */}
+            {/* STATE 1: Centered 'MY' Personal Identity Mark */}
             <div className="intro-my" ref={myRef} aria-label="Mitesh Yadav Initials">
-              MY
+              <span>MY</span>
             </div>
 
             {/* STATE 2: Centered Identity Composition (MITESH YADAV + CREATIVE DEVELOPER) */}
@@ -1120,8 +1366,8 @@ function App() {
         </section>
 
         {/* SECTION 02: SKILLS */}
-        <section className="section skills-section" id="skills">
-          <div className="section-kicker scroll-reveal">
+        <section className="section skills-section" id="skills" ref={skillsRef}>
+          <div className="section-kicker scroll-reveal" ref={skillsKickerRef}>
             <div className="kicker-left">
               <span className="kicker-index">02</span>
               <span className="kicker-divider">/</span>
@@ -1170,8 +1416,8 @@ function App() {
         </section>
 
         {/* SECTION 03: FEATURED PROJECT (EXACTLY ONE PROJECT: PATHFINDING VISUALIZER) */}
-        <section className="section projects-section" id="projects">
-          <div className="section-kicker scroll-reveal">
+        <section className="section projects-section" id="projects" ref={projectsRef}>
+          <div className="section-kicker scroll-reveal" ref={projectsKickerRef}>
             <div className="kicker-left">
               <span className="kicker-index">03</span>
               <span className="kicker-divider">/</span>
@@ -1279,8 +1525,8 @@ function App() {
         </section>
 
         {/* SECTION 04: CERTIFICATIONS */}
-        <section className="section certifications-section" id="certifications">
-          <div className="section-kicker scroll-reveal">
+        <section className="section certifications-section" id="certifications" ref={certRef}>
+          <div className="section-kicker scroll-reveal" ref={certKickerRef}>
             <div className="kicker-left">
               <span className="kicker-index">04</span>
               <span className="kicker-divider">/</span>
