@@ -3,6 +3,7 @@ import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import Lenis from "lenis";
 import MonogramLogo from "./MonogramLogo";
+import luxuryAudio from "./audioEngine";
 import "./index.css";
 
 gsap.registerPlugin(ScrollTrigger);
@@ -10,59 +11,6 @@ gsap.registerPlugin(ScrollTrigger);
 // ============================================================================
 // CROSS-DEVICE TACTILE FEEDBACK SYSTEM
 // ============================================================================
-let audioCtx = null;
-
-function getAudioContext() {
-  if (typeof window === "undefined") return null;
-  if (!audioCtx) {
-    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-    if (AudioContextClass) {
-      try {
-        audioCtx = new AudioContextClass();
-      } catch (_) {}
-    }
-  }
-  if (audioCtx && audioCtx.state === "suspended") {
-    audioCtx.resume().catch(() => {});
-  }
-  return audioCtx;
-}
-
-function playTactileTick(volume = 0.055) {
-  try {
-    const ctx = getAudioContext();
-    if (!ctx || ctx.state !== "running") return;
-
-    const now = ctx.currentTime;
-
-    // High-precision mechanical tick synthesis (~35-45ms)
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    const filter = ctx.createBiquadFilter();
-
-    filter.type = "bandpass";
-    filter.frequency.setValueAtTime(1100, now);
-    filter.Q.setValueAtTime(2.5, now);
-
-    osc.type = "sine";
-    osc.frequency.setValueAtTime(750, now);
-    osc.frequency.exponentialRampToValueAtTime(140, now + 0.035);
-
-    gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.linearRampToValueAtTime(volume, now + 0.002);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.04);
-
-    osc.connect(filter);
-    filter.connect(gain);
-    gain.connect(ctx.destination);
-
-    osc.start(now);
-    osc.stop(now + 0.045);
-  } catch (_) {
-    // Fail silently if audio is blocked or unsupported
-  }
-}
-
 let lastTactileTime = 0;
 let lastTactileKey = "";
 
@@ -86,9 +34,9 @@ function triggerTactileFeedback(key, element, soundEnabled = false) {
     } catch (_) {}
   }
 
-  // 2. Desktop Audio Feedback (Subtle mechanical tick)
+  // 2. Desktop Audio Feedback (Luxury tactile mechanical click)
   if (soundEnabled && (!prefersReducedMotion || soundEnabled)) {
-    playTactileTick(0.055);
+    luxuryAudio.playTactileClick(0.22);
   }
 
   // 3. Desktop Visual Micro-Pulse (scale 1 -> 0.995 -> 1, translateY <= 1px)
@@ -504,16 +452,26 @@ function CustomCursor() {
     const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (isTouch || prefersReducedMotion) return;
 
-    let mouseX = window.innerWidth / 2;
-    let mouseY = window.innerHeight / 2;
-    let ringX = mouseX;
-    let ringY = mouseY;
+    let mouseX = -100;
+    let mouseY = -100;
+    let ringX = -100;
+    let ringY = -100;
     let ringScale = 1;
     let rafId;
+    let hasMoved = false;
 
     const handleMouseMove = (e) => {
       mouseX = e.clientX;
       mouseY = e.clientY;
+
+      if (!hasMoved) {
+        hasMoved = true;
+        ringX = mouseX;
+        ringY = mouseY;
+        if (cursorDotRef.current) cursorDotRef.current.style.opacity = "1";
+        if (cursorRingRef.current) cursorRingRef.current.style.opacity = "1";
+      }
+
       if (cursorDotRef.current) {
         cursorDotRef.current.style.transform = `translate3d(${mouseX}px, ${mouseY}px, 0)`;
       }
@@ -566,20 +524,25 @@ function CustomCursor() {
 
   return (
     <>
-      <div className="custom-cursor-dot" ref={cursorDotRef} />
-      <div className="custom-cursor-ring" ref={cursorRingRef} />
+      <div className="custom-cursor-dot" ref={cursorDotRef} style={{ opacity: 0 }} />
+      <div className="custom-cursor-ring" ref={cursorRingRef} style={{ opacity: 0 }} />
     </>
   );
 }
 
 function App() {
   const portfolioRef = useRef(null);
+  const lenisRef = useRef(null);
   const introRef = useRef(null);
   const stageRef = useRef(null);
   const myRef = useRef(null);
+  const letterMRef = useRef(null);
+  const letterYRef = useRef(null);
   const identityRef = useRef(null);
   const nameRef = useRef(null);
   const roleRef = useRef(null);
+  const introBioRef = useRef(null);
+  const heroBgGridRef = useRef(null);
   const scrollIndicatorRef = useRef(null);
 
   // Section Refs for scroll and tactile thresholds
@@ -620,48 +583,72 @@ function App() {
   const soundEnabledRef = useRef(soundEnabled);
   soundEnabledRef.current = soundEnabled;
 
-  const toggleSound = () => {
-    setSoundEnabled((prev) => {
-      const next = !prev;
-      try {
-        localStorage.setItem("portfolio_tactile_sound", next ? "true" : "false");
-      } catch (_) {}
-      if (next) {
-        getAudioContext();
-        playTactileTick(0.06);
-      }
-      return next;
-    });
+  const toggleSound = (e) => {
+    e?.stopPropagation?.();
+    const next = !soundEnabled;
+    setSoundEnabled(next);
+    soundEnabledRef.current = next;
+    try {
+      localStorage.setItem("portfolio_tactile_sound", next ? "true" : "false");
+    } catch (_) {}
+
+    luxuryAudio.playToggleChime(next);
+    if (next) {
+      luxuryAudio.startAmbient();
+      luxuryAudio.playTactileClick(0.12);
+    } else {
+      luxuryAudio.stopAmbient();
+    }
   };
 
-  // User gesture listener to unlock AudioContext
+  // User gesture listener to respect autoplay policies and resume ambient if previously enabled
   useEffect(() => {
     const unlockAudio = () => {
-      getAudioContext();
+      if (soundEnabledRef.current) {
+        luxuryAudio.startAmbient();
+      }
       window.removeEventListener("pointerdown", unlockAudio);
       window.removeEventListener("keydown", unlockAudio);
       window.removeEventListener("touchstart", unlockAudio);
-      window.removeEventListener("wheel", unlockAudio);
     };
 
     window.addEventListener("pointerdown", unlockAudio, { passive: true });
     window.addEventListener("keydown", unlockAudio, { passive: true });
     window.addEventListener("touchstart", unlockAudio, { passive: true });
-    window.addEventListener("wheel", unlockAudio, { passive: true });
 
     return () => {
+      luxuryAudio.stopAmbient(true);
       window.removeEventListener("pointerdown", unlockAudio);
       window.removeEventListener("keydown", unlockAudio);
       window.removeEventListener("touchstart", unlockAudio);
-      window.removeEventListener("wheel", unlockAudio);
     };
   }, []);
 
   const [copiedEmail, setCopiedEmail] = useState(false);
+  const [scrollProgress, setScrollProgress] = useState(0);
   const [activeCategory, setActiveCategory] = useState("all");
   const [currentTime, setCurrentTime] = useState("");
   const [activeSection, setActiveSection] = useState("");
-  const [scrollProgress, setScrollProgress] = useState(0);
+  const [selectedProject, setSelectedProject] = useState(null);
+
+  // Lock body scroll and listen for Escape key when project modal is open
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") {
+        setSelectedProject(null);
+      }
+    };
+    if (selectedProject) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = "";
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [selectedProject]);
 
   // Scroll Progress & Active Section Tracker
   useEffect(() => {
@@ -713,8 +700,36 @@ function App() {
 
   const scrollToSection = (id) => {
     const el = document.getElementById(id);
-    if (el) {
+    if (!el) return;
+    if (lenisRef.current) {
+      lenisRef.current.scrollTo(el, { offset: -50, duration: 1.1 });
+    } else {
       el.scrollIntoView({ behavior: "smooth" });
+    }
+  };
+
+  const scrollToTop = () => {
+    if (lenisRef.current) {
+      lenisRef.current.scrollTo(0, { duration: 1.1 });
+    } else {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  };
+
+  const handleHeroMouseMove = (e) => {
+    if (!introRef.current || !heroBgGridRef.current) return;
+    const rect = introRef.current.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width - 0.5;
+    const y = (e.clientY - rect.top) / rect.height - 0.5;
+    const geoRing = heroBgGridRef.current.querySelector(".hero-geo-ring");
+    if (geoRing) {
+      gsap.to(geoRing, {
+        x: x * 24,
+        y: y * 24,
+        duration: 1.2,
+        ease: "power1.out",
+        overwrite: "auto",
+      });
     }
   };
 
@@ -731,6 +746,7 @@ function App() {
         touchMultiplier: 1.2,
       });
 
+      lenisRef.current = lenis;
       lenis.on("scroll", ScrollTrigger.update);
 
       updateLenis = (time) => {
@@ -743,98 +759,208 @@ function App() {
 
     const ctx = gsap.context(() => {
       if (prefersReducedMotion) {
-        gsap.set(myRef.current, { opacity: 1, scale: 1, x: 0, y: 0 });
+        gsap.set(myRef.current, { display: "none" });
         gsap.set(identityRef.current, { opacity: 1, scale: 1, x: 0, y: 0 });
+        const chars = nameRef.current?.querySelectorAll(".hero-char");
+        if (chars) gsap.set(chars, { opacity: 1, y: 0, scale: 1, filter: "none" });
+        if (roleRef.current) gsap.set(roleRef.current, { opacity: 1, y: 0 });
+        if (introBioRef.current) gsap.set(introBioRef.current, { opacity: 1, y: 0 });
         if (scrollIndicatorRef.current) gsap.set(scrollIndicatorRef.current, { opacity: 0 });
         return;
       }
 
-      // Initial GSAP States (Controlled, deterministic centering)
-      gsap.set(myRef.current, {
-        opacity: 1,
-        scale: 1,
-        x: 0,
-        y: 0,
-      });
+      // Initial GSAP States (100% crisp, unblurred, centered)
+      gsap.set(myRef.current, { opacity: 0, scale: 0.94 });
+      gsap.set(letterMRef.current, { x: 0, opacity: 1 });
+      gsap.set(letterYRef.current, { x: 0, opacity: 1 });
+      gsap.set(identityRef.current, { opacity: 0, y: 0 });
 
-      gsap.set(identityRef.current, {
-        opacity: 0,
-        scale: 0.92,
-        x: 0,
-        y: 0,
-      });
-
-      if (scrollIndicatorRef.current) {
-        gsap.set(scrollIndicatorRef.current, {
-          opacity: 1,
-          y: 0,
-        });
+      const heroChars = nameRef.current?.querySelectorAll(".hero-char");
+      if (heroChars && heroChars.length > 0) {
+        gsap.set(heroChars, { opacity: 0, y: 28 });
       }
 
-      // Master Intro Timeline driven by single ScrollTrigger
-      const tl = gsap.timeline();
+      const dividerLine = identityRef.current?.querySelector(".intro-divider-line");
+      if (dividerLine) {
+        gsap.set(dividerLine, { scaleX: 0, opacity: 0 });
+      }
+
+      if (roleRef.current) {
+        gsap.set(roleRef.current, { opacity: 0, y: 16 });
+      }
+
+      if (introBioRef.current) {
+        gsap.set(introBioRef.current, { opacity: 0, y: 16 });
+      }
 
       if (scrollIndicatorRef.current) {
-        tl.to(
-          scrollIndicatorRef.current,
-          {
-            opacity: 0,
-            duration: 0.4,
-            ease: "power1.out",
-          },
+        gsap.set(scrollIndicatorRef.current, { opacity: 0, y: 16 });
+      }
+
+      // Master Cinematic Entrance Timeline (Smooth, self-choreographed, non-blocking)
+      const entranceTl = gsap.timeline({
+        defaults: { ease: "power3.out" },
+      });
+
+      // Background subtle grid & geometry fade in
+      if (heroBgGridRef.current) {
+        entranceTl.fromTo(
+          heroBgGridRef.current,
+          { opacity: 0 },
+          { opacity: 1, duration: 1.0, ease: "power1.out" },
           0
         );
       }
 
-      // 1. MY scales down & fades away smoothly
-      tl.to(
+      // Monogram MY emerges with high-impact precision
+      entranceTl.to(
         myRef.current,
         {
-          opacity: 0,
-          scale: 0.82,
-          duration: 1.6,
-          ease: "power2.inOut",
+          opacity: 1,
+          scale: 1,
+          duration: 0.85,
+          ease: "power2.out",
           onStart: () => {
-            triggerTactileFeedback("intro-my", myRef.current?.querySelector("span"), soundEnabledRef.current);
+            triggerTactileFeedback("intro-monogram", myRef.current, soundEnabledRef.current);
           },
         },
-        0
-      )
-        // 2. MITESH YADAV + CREATIVE DEVELOPER smoothly fades in with natural overlap
-        .to(
-          identityRef.current,
+        0.15
+      );
+
+      // Monogram letters smoothly part left and right (double-door reveal)
+      entranceTl.to(
+        letterMRef.current,
+        {
+          x: -70,
+          opacity: 0,
+          duration: 0.9,
+          ease: "power3.inOut",
+        },
+        1.05
+      );
+
+      entranceTl.to(
+        letterYRef.current,
+        {
+          x: 70,
+          opacity: 0,
+          duration: 0.9,
+          ease: "power3.inOut",
+          onStart: () => {
+            triggerTactileFeedback("intro-part-letters", letterYRef.current, soundEnabledRef.current);
+          },
+        },
+        1.05
+      );
+
+      // Identity container reveals behind parting letters
+      entranceTl.to(
+        identityRef.current,
+        {
+          opacity: 1,
+          duration: 0.5,
+          ease: "power2.out",
+        },
+        1.25
+      );
+
+      // Staggered letters of MITESH YADAV rise cleanly
+      if (heroChars && heroChars.length > 0) {
+        entranceTl.to(
+          heroChars,
           {
             opacity: 1,
-            scale: 1,
-            duration: 1.3,
-            ease: "power2.out",
+            y: 0,
+            duration: 0.75,
+            stagger: 0.035,
+            ease: "power3.out",
             onStart: () => {
-              triggerTactileFeedback("intro-mitesh-yadav", nameRef.current, soundEnabledRef.current);
+              triggerTactileFeedback("intro-name", nameRef.current, soundEnabledRef.current);
             },
           },
-          0.7
-        )
-        .call(() => {
-          triggerTactileFeedback("intro-creative-developer", roleRef.current, soundEnabledRef.current);
-        }, null, 2.0)
-        // 3. Holds centered for a clear, solid portion of scroll
-        .to({}, {
-          duration: 2.8,
-        })
-        // 4. Smoothly fades away before About section enters
-        .to(identityRef.current, {
-          opacity: 0,
-          scale: 0.98,
-          duration: 1.2,
-          ease: "power2.inOut",
-        });
+          1.3
+        );
+      }
 
+      // Divider hairline expands
+      if (dividerLine) {
+        entranceTl.to(
+          dividerLine,
+          {
+            scaleX: 1,
+            opacity: 1,
+            duration: 0.7,
+            ease: "power2.out",
+          },
+          1.6
+        );
+      }
+
+      // Subtitle role text rises
+      if (roleRef.current) {
+        entranceTl.to(
+          roleRef.current,
+          {
+            opacity: 1,
+            y: 0,
+            duration: 0.65,
+            ease: "power2.out",
+          },
+          1.75
+        );
+      }
+
+      // Intro bio reveals
+      if (introBioRef.current) {
+        entranceTl.to(
+          introBioRef.current,
+          {
+            opacity: 1,
+            y: 0,
+            duration: 0.65,
+            ease: "power2.out",
+          },
+          1.9
+        );
+      }
+
+      // Scroll indicator at bottom appears
+      if (scrollIndicatorRef.current) {
+        entranceTl.to(
+          scrollIndicatorRef.current,
+          {
+            opacity: 1,
+            y: 0,
+            duration: 0.65,
+            ease: "power2.out",
+          },
+          2.05
+        );
+      }
+
+      // Natural Lightweight Scroll Parallax:
+      // Only background grid gently shifts for spatial depth.
+      // Identity stays permanently 100% visible so it NEVER disappears when scrolling down and back up!
+      if (heroBgGridRef.current) {
+        ScrollTrigger.create({
+          trigger: introRef.current,
+          start: "top top",
+          end: "bottom top",
+          scrub: true,
+          animation: gsap.to(heroBgGridRef.current, {
+            y: -50,
+            ease: "none",
+          }),
+        });
+      }
+
+      // Explicit guarantee: whenever viewport returns to the top, identity is 100% visible
       ScrollTrigger.create({
         trigger: introRef.current,
         start: "top top",
-        end: "bottom bottom",
-        scrub: 1,
-        animation: tl,
+        onEnterBack: () => {
+          gsap.set(identityRef.current, { opacity: 1, y: 0 });
+        },
       });
 
       // Section Tactile Threshold ScrollTriggers (Crossing thresholds in both directions)
@@ -846,7 +972,7 @@ function App() {
         { id: "contact", ref: contactRef, targetRef: contactKickerRef },
       ];
 
-      sectionConfigs.forEach(({ id, ref, targetRef }) => {
+      sectionConfigs.forEach(({ id, ref, targetRef }, idx) => {
         if (ref.current) {
           ScrollTrigger.create({
             trigger: ref.current,
@@ -855,6 +981,9 @@ function App() {
             onEnter: () => {
               const target = targetRef?.current || ref.current?.querySelector(".section-kicker") || ref.current;
               triggerTactileFeedback(`section-${id}-enter`, target, soundEnabledRef.current);
+              if (soundEnabledRef.current) {
+                luxuryAudio.playSectionTransition(idx + 1);
+              }
             },
             onLeaveBack: () => {
               const target = targetRef?.current || ref.current?.querySelector(".section-kicker") || ref.current;
@@ -1179,6 +1308,7 @@ function App() {
       if (lenis) {
         lenis.off("scroll", ScrollTrigger.update);
         lenis.destroy();
+        lenisRef.current = null;
       }
       ctx.revert();
     };
@@ -1199,18 +1329,18 @@ function App() {
         
         <div
           className="brand-group"
-          onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+          onClick={scrollToTop}
           role="button"
           tabIndex={0}
           aria-label="Mitesh Yadav — Return to top"
           onKeyDown={(e) => {
             if (e.key === "Enter" || e.key === " ") {
               e.preventDefault();
-              window.scrollTo({ top: 0, behavior: "smooth" });
+              scrollToTop();
             }
           }}
         >
-          <MonogramLogo className="brand-logo-svg" width={48} height={28} />
+          <MonogramLogo className="brand-logo-svg" width={40} height={27} />
           <span className="brand-sub">Mitesh Yadav</span>
         </div>
 
@@ -1226,6 +1356,7 @@ function App() {
             type="button"
             className={activeSection === "about" ? "active" : ""}
             onClick={() => scrollToSection("about")}
+            onMouseEnter={() => soundEnabled && luxuryAudio.playHoverTick()}
           >
             About
           </button>
@@ -1233,6 +1364,7 @@ function App() {
             type="button"
             className={activeSection === "skills" ? "active" : ""}
             onClick={() => scrollToSection("skills")}
+            onMouseEnter={() => soundEnabled && luxuryAudio.playHoverTick()}
           >
             Skills
           </button>
@@ -1240,6 +1372,7 @@ function App() {
             type="button"
             className={activeSection === "projects" ? "active" : ""}
             onClick={() => scrollToSection("projects")}
+            onMouseEnter={() => soundEnabled && luxuryAudio.playHoverTick()}
           >
             Work
           </button>
@@ -1247,12 +1380,14 @@ function App() {
             type="button"
             className={activeSection === "certifications" ? "active" : ""}
             onClick={() => scrollToSection("certifications")}
+            onMouseEnter={() => soundEnabled && luxuryAudio.playHoverTick()}
           >
             Certificates
           </button>
           <button
             type="button"
             onClick={() => scrollToSection("contact")}
+            onMouseEnter={() => soundEnabled && luxuryAudio.playHoverTick()}
             className={`nav-contact-btn ${activeSection === "contact" ? "active" : ""}`}
           >
             Let&apos;s Talk
@@ -1262,8 +1397,9 @@ function App() {
             type="button"
             onClick={toggleSound}
             className={`sound-toggle-btn ${soundEnabled ? "active" : ""}`}
-            aria-label={soundEnabled ? "Disable tactile audio feedback" : "Enable tactile audio feedback"}
-            title={soundEnabled ? "Tactile Sound: On" : "Tactile Sound: Off"}
+            aria-label={soundEnabled ? "Disable cinematic ambient audio" : "Enable cinematic ambient audio"}
+            aria-pressed={soundEnabled}
+            title={soundEnabled ? "Cinematic Audio: On" : "Cinematic Audio: Off"}
           >
             <span className="sound-toggle-icon" aria-hidden="true">
               <span className="sound-wave-bar bar-1" />
@@ -1276,26 +1412,87 @@ function App() {
       </header>
 
       <main>
-        {/* OPENING EXPERIENCE: Dedicated 400vh Scroll-Driven Staged Intro */}
-        <section className="intro-scroll" ref={introRef} aria-label="Intro scroll stage">
+        {/* OPENING EXPERIENCE: Dedicated Cinematic Hero */}
+        <section
+          className="intro-scroll"
+          ref={introRef}
+          onMouseMove={handleHeroMouseMove}
+          aria-label="Intro hero stage"
+        >
           <div className="intro-stage" ref={stageRef}>
-            {/* STATE 1: Centered 'MY' Personal Identity Mark */}
+            {/* Cinematic Background Architectural Grid & Geometric Accents */}
+            <div className="hero-grid-background" ref={heroBgGridRef} aria-hidden="true">
+              <div className="hero-grid-lines" />
+              <div className="hero-geo-ring" />
+              <div className="hero-geo-cross cross-tl">+</div>
+              <div className="hero-geo-cross cross-tr">+</div>
+              <div className="hero-geo-cross cross-bl">+</div>
+              <div className="hero-geo-cross cross-br">+</div>
+              <div className="hero-geo-coordinate coord-left">
+                <span>19°04&apos;N 72°52&apos;E</span>
+              </div>
+              <div className="hero-geo-coordinate coord-right">
+                <span>PORTFOLIO // 2026</span>
+              </div>
+              <div className="hero-guide-line guide-h-top" />
+              <div className="hero-guide-line guide-h-bottom" />
+            </div>
+
+            {/* STATE 1: Large Central 'MY' Monogram that splits into M and Y on entrance */}
             <div className="intro-my" ref={myRef} aria-label="Mitesh Yadav Initials">
-              <span>MY</span>
+              <div className="monogram-wrapper">
+                <span className="monogram-letter monogram-letter-m" ref={letterMRef}>
+                  M
+                </span>
+                <span className="monogram-letter monogram-letter-y" ref={letterYRef}>
+                  Y
+                </span>
+              </div>
             </div>
 
-            {/* STATE 2: Centered Identity Composition (MITESH YADAV + CREATIVE DEVELOPER) */}
+            {/* STATE 2: Revealed Behind Monogram: MITESH YADAV + Subtitle + Short Intro */}
             <div className="intro-identity" ref={identityRef}>
-              <h1 className="intro-name" ref={nameRef}>MITESH YADAV</h1>
-              <p className="intro-role" ref={roleRef}>CREATIVE DEVELOPER</p>
+              <h1 className="intro-name" ref={nameRef} aria-label="Mitesh Yadav">
+                <span className="name-line name-line-first">
+                  {"MITESH".split("").map((char, index) => (
+                    <span key={`m-${index}`} className="hero-char">
+                      {char}
+                    </span>
+                  ))}
+                </span>
+                <span className="name-line name-line-second">
+                  {"YADAV".split("").map((char, index) => (
+                    <span key={`y-${index}`} className="hero-char">
+                      {char}
+                    </span>
+                  ))}
+                </span>
+              </h1>
+
+              <div className="intro-divider-line" />
+
+              <p className="intro-role" ref={roleRef}>
+                COMPUTER SCIENCE STUDENT &amp; DEVELOPER
+              </p>
+
+              <p className="intro-bio" ref={introBioRef}>
+                I build digital experiences through code, creativity, and continuous learning.
+              </p>
             </div>
 
-            <div className="scroll-indicator" ref={scrollIndicatorRef}>
+            {/* Subtle Animated Clickable Scroll Indicator */}
+            <button
+              type="button"
+              className="scroll-indicator"
+              ref={scrollIndicatorRef}
+              onClick={() => scrollToSection("about")}
+              aria-label="Scroll to explore About section"
+            >
               <span className="scroll-text">SCROLL TO EXPLORE</span>
               <div className="scroll-line">
                 <div className="scroll-dot" />
               </div>
-            </div>
+            </button>
           </div>
         </section>
 
@@ -1415,7 +1612,7 @@ function App() {
           </div>
         </section>
 
-        {/* SECTION 03: FEATURED PROJECT (EXACTLY ONE PROJECT: PATHFINDING VISUALIZER) */}
+        {/* SECTION 03: FEATURED WORK */}
         <section className="section projects-section" id="projects" ref={projectsRef}>
           <div className="section-kicker scroll-reveal" ref={projectsKickerRef}>
             <div className="kicker-left">
@@ -1423,105 +1620,263 @@ function App() {
               <span className="kicker-divider">/</span>
               <span className="kicker-title">SELECTED WORK</span>
             </div>
-            <span className="kicker-tag">FEATURED PROJECT — 01 OF 01</span>
+            <span className="kicker-tag">FEATURED WORK — 02 PRODUCTIONS</span>
           </div>
 
           <div className="section-header-block scroll-reveal">
-            <h2 className="section-title">FEATURED PROJECT.</h2>
+            <h2 className="section-title">FEATURED WORK.</h2>
             <p className="section-description">
-              A deep dive into algorithmic problem solving, graph theory, and interactive user interface engineering.
+              A curated selection of production web applications, algorithmic engineering, and full-stack interactive systems.
             </p>
           </div>
 
-          {/* Featured Single Project Showcase */}
-          <article className="featured-project-card scroll-reveal">
-            <div className="project-top-bar">
-              <div className="project-tag">
-                <span className="project-num">PROJECT / 01</span>
-                <span className="project-type">GRAPH ALGORITHMS & INTERACTION</span>
+          <div className="projects-grid-stack">
+            {/* PROJECT 01: PATHFINDING VISUALIZER */}
+            <article className="featured-project-card scroll-reveal">
+              <div className="project-top-bar">
+                <div className="project-tag">
+                  <span className="project-num">PROJECT / 01</span>
+                  <span className="project-type">GRAPH ALGORITHMS & INTERACTION</span>
+                </div>
+                <div className="project-status-badge">
+                  <span className="status-dot" />
+                  <span>Production Live</span>
+                </div>
               </div>
-              <div className="project-status-badge">
-                <span className="status-dot" />
-                <span>Production Live</span>
-              </div>
-            </div>
 
-            <div className="project-headline-row">
-              <h3 className="project-hero-title">PATHFINDING VISUALIZER</h3>
-              <div className="project-actions">
-                <a
-                  href="https://pathfinding-visualizer-react-js-pro.vercel.app/"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="editorial-action-btn primary"
-                >
-                  <span>Launch Live Project</span>
-                  <span className="btn-arrow">↗</span>
-                </a>
-                <a
-                  href="https://github.com/ymitesh760-star"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="editorial-action-btn secondary"
-                >
-                  <span>GitHub Repo</span>
-                  <span className="btn-arrow">↗</span>
-                </a>
+              <div className="project-headline-row">
+                <h3 className="project-hero-title">PATHFINDING VISUALIZER</h3>
+                <div className="project-actions">
+                  <a
+                    href="https://pathfinding-visualizer-react-js-pro.vercel.app/"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="editorial-action-btn primary"
+                    onClick={() => soundEnabled && luxuryAudio.playTactileClick()}
+                  >
+                    <span>Launch Live Project</span>
+                    <span className="btn-arrow">↗</span>
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedProject("pathfinding");
+                      soundEnabled && luxuryAudio.playTactileClick();
+                    }}
+                    className="editorial-action-btn secondary"
+                  >
+                    <span>View Project</span>
+                    <span className="btn-arrow">⊕</span>
+                  </button>
+                  <a
+                    href="https://github.com/ymitesh760-star"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="editorial-action-btn secondary"
+                    onClick={() => soundEnabled && luxuryAudio.playTactileClick()}
+                  >
+                    <span>GitHub Repo</span>
+                    <span className="btn-arrow">↗</span>
+                  </a>
+                </div>
               </div>
-            </div>
 
-            <div className="project-body-grid">
-              <div className="project-info-column">
-                <div className="info-block">
-                  <h4 className="info-heading">OVERVIEW</h4>
-                  <p className="info-text">
-                    An interactive pathfinding visualizer built in React to explore algorithm mechanics and understand how different graph search heuristics find the shortest path between coordinates in real-time.
-                  </p>
+              <div className="project-body-grid">
+                <div className="project-info-column">
+                  <div className="info-block">
+                    <h4 className="info-heading">OVERVIEW</h4>
+                    <p className="info-text">
+                      An interactive pathfinding visualizer built in React to explore algorithm mechanics and understand how different graph search heuristics find the shortest path between coordinates in real-time.
+                    </p>
+                  </div>
+
+                  <div className="info-block">
+                    <h4 className="info-heading">IMPLEMENTED ALGORITHMS</h4>
+                    <ul className="algo-list">
+                      <li>
+                        <strong>A* Search:</strong> Uses Manhattan distance heuristics to guarantee the shortest path while dramatically reducing visited nodes.
+                      </li>
+                      <li>
+                        <strong>Dijkstra&apos;s Algorithm:</strong> The father of pathfinding; guarantees shortest path across weighted & unweighted networks.
+                      </li>
+                      <li>
+                        <strong>Breadth-First Search (BFS):</strong> Explores equally in all directions; optimal for unweighted graphs.
+                      </li>
+                      <li>
+                        <strong>Depth-First Search (DFS):</strong> Exhaustively dives deep into paths; demonstrates tree exploration.
+                      </li>
+                    </ul>
+                  </div>
+
+                  <div className="info-block">
+                    <h4 className="info-heading">TECH STACK & ARCHITECTURE</h4>
+                    <div className="tech-tags-cloud">
+                      <span>React.js</span>
+                      <span>JavaScript (ES6+)</span>
+                      <span>A* Algorithm</span>
+                      <span>Dijkstra</span>
+                      <span>CSS Grid</span>
+                      <span>State Scheduling</span>
+                    </div>
+                  </div>
                 </div>
 
-                <div className="info-block">
-                  <h4 className="info-heading">IMPLEMENTED ALGORITHMS</h4>
-                  <ul className="algo-list">
-                    <li>
-                      <strong>A* Search:</strong> Uses Manhattan distance heuristics to guarantee the shortest path while dramatically reducing visited nodes.
-                    </li>
-                    <li>
-                      <strong>Dijkstra&apos;s Algorithm:</strong> The father of pathfinding; guarantees shortest path across weighted & unweighted networks.
-                    </li>
-                    <li>
-                      <strong>Breadth-First Search (BFS):</strong> Explores equally in all directions; optimal for unweighted graphs.
-                    </li>
-                    <li>
-                      <strong>Depth-First Search (DFS):</strong> Exhaustively dives deep into paths; demonstrates tree exploration.
-                    </li>
-                  </ul>
-                </div>
-
-                <div className="info-block">
-                  <h4 className="info-heading">TECH STACK & ARCHITECTURE</h4>
-                  <div className="tech-tags-cloud">
-                    <span>React.js</span>
-                    <span>JavaScript (ES6+)</span>
-                    <span>A* Algorithm</span>
-                    <span>Dijkstra</span>
-                    <span>CSS Grid</span>
-                    <span>State Scheduling</span>
+                <div className="project-interactive-column">
+                  <div className="simulation-container">
+                    <PathfindingPreview />
                   </div>
                 </div>
               </div>
 
-              <div className="project-interactive-column">
-                <div className="simulation-container">
-                  <PathfindingPreview />
+              <div className="project-card-footer">
+                <span>EXPLORE LIVE PRODUCTION AT PATHFINDING-VISUALIZER.VERCEL.APP</span>
+                <span>2026 EDITION</span>
+              </div>
+            </article>
+
+            {/* PROJECT 02: CHREZAA ATELIER */}
+            <article className="featured-project-card scroll-reveal">
+              <div className="project-top-bar">
+                <div className="project-tag">
+                  <span className="project-num">PROJECT / 02</span>
+                  <span className="project-type">FULL-STACK E-COMMERCE & BOUTIQUE ATELIER</span>
+                </div>
+                <div className="project-status-badge">
+                  <span className="status-dot" />
+                  <span>Production Live</span>
                 </div>
               </div>
-            </div>
 
-            <div className="project-card-footer">
-              <span>EXPLORE LIVE PRODUCTION AT PATHFINDING-VISUALIZER.VERCEL.APP</span>
-              <span>2026 EDITION</span>
-            </div>
-          </article>
+              <div className="project-headline-row">
+                <h3 className="project-hero-title">CHREZAA ATELIER</h3>
+                <div className="project-actions">
+                  <a
+                    href="https://6ad435c390ed2d78279911b9--chrezaa.netlify.app/"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="editorial-action-btn primary"
+                    onClick={() => soundEnabled && luxuryAudio.playTactileClick()}
+                  >
+                    <span>Live Demo</span>
+                    <span className="btn-arrow">↗</span>
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedProject("chrezaa");
+                      soundEnabled && luxuryAudio.playTactileClick();
+                    }}
+                    className="editorial-action-btn secondary"
+                  >
+                    <span>View Project</span>
+                    <span className="btn-arrow">⊕</span>
+                  </button>
+                  <a
+                    href="https://github.com/ymitesh760-star/Womens-Fashion-"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="editorial-action-btn secondary"
+                    onClick={() => soundEnabled && luxuryAudio.playTactileClick()}
+                  >
+                    <span>GitHub Repo</span>
+                    <span className="btn-arrow">↗</span>
+                  </a>
+                </div>
+              </div>
+
+              <div className="project-body-grid">
+                <div className="project-info-column">
+                  <div className="info-block">
+                    <h4 className="info-heading">OVERVIEW</h4>
+                    <p className="info-text">
+                      A luxury Indian women&apos;s fashion boutique atelier and multi-tenant e-commerce platform. Engineered with customer storefronts, scoped supplier dashboards, real-time Firebase inventory management, automated WhatsApp order notifications, and an AI personal stylist.
+                    </p>
+                  </div>
+
+                  <div className="info-block">
+                    <h4 className="info-heading">CORE CAPABILITIES & HIGHLIGHTS</h4>
+                    <ul className="algo-list">
+                      <li>
+                        <strong>Multi-Role Architecture:</strong> Customer boutique, isolated Supplier Portal for inventory and dispatching, and Super-Admin oversight.
+                      </li>
+                      <li>
+                        <strong>Real-Time Cloud Synchronization:</strong> Firebase Firestore database synchronizing live stock counts, product catalogs, and order tracking.
+                      </li>
+                      <li>
+                        <strong>WhatsApp Order Dispatch:</strong> Automated conversational order alerts and status notifications directly to patrons and artisans.
+                      </li>
+                      <li>
+                        <strong>AI Wardrobe Stylist:</strong> Curated look suggestions and occasion-tailored recommendations based on customer preferences.
+                      </li>
+                    </ul>
+                  </div>
+
+                  <div className="info-block">
+                    <h4 className="info-heading">TECH STACK & ARCHITECTURE</h4>
+                    <div className="tech-tags-cloud">
+                      <span>React.js (SPA)</span>
+                      <span>Firebase Firestore</span>
+                      <span>Firebase Storage</span>
+                      <span>React Router v6</span>
+                      <span>Framer Motion</span>
+                      <span>WhatsApp Cloud API</span>
+                      <span>Vite</span>
+                      <span>Netlify CI/CD</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="project-interactive-column">
+                  <div
+                    className="project-preview-frame"
+                    onClick={() => {
+                      setSelectedProject("chrezaa");
+                      soundEnabled && luxuryAudio.playTactileClick();
+                    }}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        setSelectedProject("chrezaa");
+                        soundEnabled && luxuryAudio.playTactileClick();
+                      }
+                    }}
+                    title="Click to view Chrezaa project details"
+                  >
+                    <div className="browser-chrome-bar">
+                      <div className="browser-dots">
+                        <span className="b-dot close" />
+                        <span className="b-dot min" />
+                        <span className="b-dot max" />
+                      </div>
+                      <div className="browser-url-pill">
+                        <span>https://chrezaa.netlify.app</span>
+                      </div>
+                      <div className="browser-action-hint">
+                        <span>View Details ⊕</span>
+                      </div>
+                    </div>
+                    <div className="project-image-wrap">
+                      <img
+                        src="/projects/chrezaa.jpg"
+                        alt="CHREZAA Luxury Women's Fashion & Boutique Atelier Preview"
+                        className="project-showcase-img"
+                        loading="lazy"
+                      />
+                      <div className="project-img-overlay">
+                        <span className="overlay-badge">Click to Explore Details ⊕</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="project-card-footer">
+                <span>EXPLORE LIVE PRODUCTION AT CHREZAA.NETLIFY.APP</span>
+                <span>2026 EDITION · FULL-STACK COMMERCE</span>
+              </div>
+            </article>
+          </div>
         </section>
 
         {/* SECTION 04: CERTIFICATIONS */}
@@ -1686,6 +2041,230 @@ function App() {
           </footer>
         </section>
       </main>
+
+      {/* PROJECT DETAILS MODAL */}
+      {selectedProject && (
+        <div
+          className="project-modal-backdrop"
+          onClick={() => {
+            setSelectedProject(null);
+            soundEnabled && luxuryAudio.playTactileClick();
+          }}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="modal-project-title"
+        >
+          <div
+            className="project-modal-container"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="project-modal-header">
+              <div className="modal-tag">
+                <span>
+                  {selectedProject === "chrezaa"
+                    ? "PROJECT / 02 · FULL-STACK E-COMMERCE"
+                    : "PROJECT / 01 · ALGORITHM VISUALIZATION"}
+                </span>
+              </div>
+              <button
+                type="button"
+                className="modal-close-btn"
+                onClick={() => {
+                  setSelectedProject(null);
+                  soundEnabled && luxuryAudio.playTactileClick();
+                }}
+                aria-label="Close project modal"
+                title="Close (Esc)"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="project-modal-body">
+              {selectedProject === "chrezaa" ? (
+                <>
+                  <div className="modal-hero-header">
+                    <span className="modal-eyebrow">HAUTE COUTURE 2026 · PRODUCTION ATELIER</span>
+                    <h2 id="modal-project-title" className="modal-title">CHREZAA ATELIER</h2>
+                    <p className="modal-lead">
+                      A full-stack luxury fashion e-commerce boutique platform built for Indian couture collections, multi-tier supplier operations, real-time inventory synchronization, and conversational order dispatch.
+                    </p>
+
+                    <div className="modal-cta-row">
+                      <a
+                        href="https://6ad435c390ed2d78279911b9--chrezaa.netlify.app/"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="editorial-action-btn primary"
+                        onClick={() => soundEnabled && luxuryAudio.playTactileClick()}
+                      >
+                        <span>Launch Live Demo</span>
+                        <span className="btn-arrow">↗</span>
+                      </a>
+                      <a
+                        href="https://github.com/ymitesh760-star/Womens-Fashion-"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="editorial-action-btn secondary"
+                        onClick={() => soundEnabled && luxuryAudio.playTactileClick()}
+                      >
+                        <span>GitHub Repository</span>
+                        <span className="btn-arrow">↗</span>
+                      </a>
+                    </div>
+                  </div>
+
+                  <div className="modal-image-showcase">
+                    <div className="browser-chrome-bar">
+                      <div className="browser-dots">
+                        <span className="b-dot close" />
+                        <span className="b-dot min" />
+                        <span className="b-dot max" />
+                      </div>
+                      <div className="browser-url-pill">
+                        <span>https://chrezaa.netlify.app</span>
+                      </div>
+                      <span className="browser-badge">Live Production</span>
+                    </div>
+                    <img
+                      src="/projects/chrezaa.jpg"
+                      alt="CHREZAA Live Boutique Showcase"
+                      className="modal-feature-img"
+                    />
+                  </div>
+
+                  <div className="modal-details-grid">
+                    <div className="modal-detail-card">
+                      <h3 className="modal-card-title">ECOSYSTEM ARCHITECTURE</h3>
+                      <p className="modal-card-text">
+                        Designed with 3 dedicated user tiers:
+                      </p>
+                      <ul className="modal-feature-list">
+                        <li>
+                          <strong>Boutique Storefront:</strong> High-end luxury experience with editorial collections (Dresses, Footwear, Jewellery, Bags, Ethnic Wear), instant wishlist, and cart bag management.
+                        </li>
+                        <li>
+                          <strong>Supplier Dashboard:</strong> Isolated portal enabling partner artisans to manage catalog pieces, edit available sizes, and monitor order fulfillments.
+                        </li>
+                        <li>
+                          <strong>Super-Admin Hub:</strong> Real-time oversight over total GMV, supplier commissions, order status toggles, and catalog curation.
+                        </li>
+                      </ul>
+                    </div>
+
+                    <div className="modal-detail-card">
+                      <h3 className="modal-card-title">COMMERCE & AI INNOVATIONS</h3>
+                      <ul className="modal-feature-list">
+                        <li>
+                          <strong>Firebase Cloud Firestore:</strong> Synchronizes live stock counts, pricing, customer inquiries, and order records with zero latency.
+                        </li>
+                        <li>
+                          <strong>Automated WhatsApp Notifications:</strong> Automated transactional customer alerts for order confirmations, dispatch, and doorstep status tracking.
+                        </li>
+                        <li>
+                          <strong>AI Wardrobe Stylist:</strong> An interactive concierge helping patrons discover silhouettes and complete the look with styling rationale.
+                        </li>
+                      </ul>
+                    </div>
+                  </div>
+
+                  <div className="modal-tech-section">
+                    <h4 className="info-heading">VERIFIED TECH STACK</h4>
+                    <div className="tech-tags-cloud">
+                      <span>React.js 18</span>
+                      <span>Firebase Firestore</span>
+                      <span>Firebase Storage</span>
+                      <span>React Router v6</span>
+                      <span>Framer Motion</span>
+                      <span>Lucide React</span>
+                      <span>WhatsApp Cloud API</span>
+                      <span>Vite Tooling</span>
+                      <span>Netlify Production</span>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="modal-hero-header">
+                    <span className="modal-eyebrow">GRAPH ALGORITHMS & STATE SCHEDULING</span>
+                    <h2 id="modal-project-title" className="modal-title">PATHFINDING VISUALIZER</h2>
+                    <p className="modal-lead">
+                      An interactive sandbox to simulate, benchmark, and visualize shortest-path search algorithms and maze generation heuristics in real-time.
+                    </p>
+
+                    <div className="modal-cta-row">
+                      <a
+                        href="https://pathfinding-visualizer-react-js-pro.vercel.app/"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="editorial-action-btn primary"
+                        onClick={() => soundEnabled && luxuryAudio.playTactileClick()}
+                      >
+                        <span>Launch Live Project</span>
+                        <span className="btn-arrow">↗</span>
+                      </a>
+                      <a
+                        href="https://github.com/ymitesh760-star"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="editorial-action-btn secondary"
+                        onClick={() => soundEnabled && luxuryAudio.playTactileClick()}
+                      >
+                        <span>GitHub Repository</span>
+                        <span className="btn-arrow">↗</span>
+                      </a>
+                    </div>
+                  </div>
+
+                  <div className="modal-details-grid">
+                    <div className="modal-detail-card">
+                      <h3 className="modal-card-title">ALGORITHMIC MECHANICS</h3>
+                      <ul className="modal-feature-list">
+                        <li>
+                          <strong>A* Search:</strong> Optimal path heuristic using Manhattan coordinate distances to reduce visited nodes.
+                        </li>
+                        <li>
+                          <strong>Dijkstra&apos;s Algorithm:</strong> Guaranteed shortest path across weighted grids.
+                        </li>
+                        <li>
+                          <strong>Breadth-First Search (BFS):</strong> Level-by-level exhaustive unweighted graph exploration.
+                        </li>
+                        <li>
+                          <strong>Depth-First Search (DFS):</strong> Recursive branch traversal exploration.
+                        </li>
+                      </ul>
+                    </div>
+
+                    <div className="modal-detail-card">
+                      <h3 className="modal-card-title">PERFORMANCE & ARCHITECTURE</h3>
+                      <ul className="modal-feature-list">
+                        <li>
+                          <strong>Custom State Scheduler:</strong> Decoupled animation ticks ensuring 60 FPS renders during complex grid path calculations.
+                        </li>
+                        <li>
+                          <strong>Dynamic Obstacle Canvas:</strong> Drag-and-drop wall placement and interactive weight nodes.
+                        </li>
+                      </ul>
+                    </div>
+                  </div>
+
+                  <div className="modal-tech-section">
+                    <h4 className="info-heading">TECH STACK</h4>
+                    <div className="tech-tags-cloud">
+                      <span>React.js</span>
+                      <span>JavaScript (ES6+)</span>
+                      <span>A* Algorithm</span>
+                      <span>Dijkstra</span>
+                      <span>CSS Grid</span>
+                      <span>Vercel</span>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

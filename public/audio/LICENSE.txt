@@ -1,0 +1,20 @@
+AUDIO ASSET LICENSE & ATTRIBUTION
+
+Track: Mountains (Cinematic Electronic Instrumental)
+Artist: Andrew Ev
+Platform: Mixkit (Mixkit ID: 187)
+Official Page: https://mixkit.co/free-stock-music/electronica/
+Direct CDN Source: https://assets.mixkit.co/music/187/187.mp3
+License: Mixkit Stock Music Free License (https://mixkit.co/license/#musicFree)
+
+Track Style & Characteristics:
+- Genre: Cinematic Electronica / Atmospheric
+- Aesthetic: Inspired by the warm, melodic, uplifting atmosphere of ODESZA (ODESZA "A Moment Apart" style reference)
+- Elements: Smooth cinematic synths, gentle electronic pulse, airy reverbs, no vocals, no sudden loud drops or aggressive bass
+- Loudness Normalization: Mastered to EBU R128 standard (-16 LUFS integrated, -1.5 dBFS true peak) for balanced background reading volume
+- Arrangement: Engineered with seamless equal-power crossfade looping for infinite, gapless playback
+
+Permitted Uses under Mixkit Free License:
+- Permitted for commercial and personal projects.
+- Permitted for web applications, developer portfolios, digital media, podcasts, and video.
+- Royalty-free, no attribution strictly required by license (provided here for documentation and transparency).
