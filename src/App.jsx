@@ -650,6 +650,20 @@ function App() {
     };
   }, [selectedProject]);
 
+  // Subtle 3D Spring Tilt Physics for Interactive Project Previews
+  const handleCardTilt = (e) => {
+    const el = e.currentTarget;
+    const rect = el.getBoundingClientRect();
+    const xPct = (e.clientX - rect.left) / rect.width - 0.5;
+    const yPct = (e.clientY - rect.top) / rect.height - 0.5;
+    el.style.transform = `perspective(1000px) rotateY(${xPct * 8}deg) rotateX(${-yPct * 8}deg) translateY(-4px)`;
+  };
+
+  const handleCardTiltReset = (e) => {
+    const el = e.currentTarget;
+    el.style.transform = "";
+  };
+
   // Scroll Progress & Active Section Tracker
   useEffect(() => {
     const handleScroll = () => {
@@ -1620,7 +1634,7 @@ function App() {
               <span className="kicker-divider">/</span>
               <span className="kicker-title">SELECTED WORK</span>
             </div>
-            <span className="kicker-tag">FEATURED WORK — 02 PRODUCTIONS</span>
+            <span className="kicker-tag">FEATURED WORK — 03 PRODUCTIONS</span>
           </div>
 
           <div className="section-header-block scroll-reveal">
@@ -1833,6 +1847,8 @@ function App() {
                       setSelectedProject("chrezaa");
                       soundEnabled && luxuryAudio.playTactileClick();
                     }}
+                    onMouseMove={handleCardTilt}
+                    onMouseLeave={handleCardTiltReset}
                     role="button"
                     tabIndex={0}
                     onKeyDown={(e) => {
@@ -1874,6 +1890,150 @@ function App() {
               <div className="project-card-footer">
                 <span>EXPLORE LIVE PRODUCTION AT CHREZAA.NETLIFY.APP</span>
                 <span>2026 EDITION · FULL-STACK COMMERCE</span>
+              </div>
+            </article>
+
+            {/* PROJECT 03: ALL PROJECTS CARDS */}
+            <article className="featured-project-card scroll-reveal">
+              <div className="project-top-bar">
+                <div className="project-tag">
+                  <span className="project-num">PROJECT / 03</span>
+                  <span className="project-type">INTERACTIVE SHOWCASE & 3D WEBGL</span>
+                </div>
+                <div className="project-status-badge">
+                  <span className="status-dot" />
+                  <span>Production Live</span>
+                </div>
+              </div>
+
+              <div className="project-headline-row">
+                <h3 className="project-hero-title">ALL PROJECTS CARDS</h3>
+                <div className="project-actions">
+                  <a
+                    href="https://all-projects-sigma.vercel.app/"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="editorial-action-btn primary"
+                    onClick={() => soundEnabled && luxuryAudio.playTactileClick()}
+                  >
+                    <span>View Project</span>
+                    <span className="btn-arrow">↗</span>
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedProject("all-projects-cards");
+                      soundEnabled && luxuryAudio.playTactileClick();
+                    }}
+                    className="editorial-action-btn secondary"
+                  >
+                    <span>Project Details</span>
+                    <span className="btn-arrow">⊕</span>
+                  </button>
+                  <a
+                    href="https://github.com/ymitesh760-star/All-Project-s-Card-"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="editorial-action-btn secondary"
+                    onClick={() => soundEnabled && luxuryAudio.playTactileClick()}
+                  >
+                    <span>GitHub</span>
+                    <span className="btn-arrow">↗</span>
+                  </a>
+                </div>
+              </div>
+
+              <div className="project-body-grid">
+                <div className="project-info-column">
+                  <div className="info-block">
+                    <h4 className="info-heading">OVERVIEW</h4>
+                    <p className="info-text">
+                      An editorial, multi-tier project showcase and interactive portfolio engine. Engineered with category filtering, real-time debounced query search, physics-driven spring tilt interactions, and integrated WebGL simulations.
+                    </p>
+                  </div>
+
+                  <div className="info-block">
+                    <h4 className="info-heading">KEY HIGHLIGHTS & ARCHITECTURE</h4>
+                    <ul className="algo-list">
+                      <li>
+                        <strong>Dynamic Showcase Engine:</strong> Instant category filtering across Web Applications, Interactive Experiences, and Tools with live telemetry counters.
+                      </li>
+                      <li>
+                        <strong>Physics-Based 3D Tilt:</strong> Pointer-reactive spring kinematics computing real-time angular tilt based on cursor velocity and coordinates.
+                      </li>
+                      <li>
+                        <strong>Interactive WebGL Simulations:</strong> Integrated Three.js 3D tactical game boards with soft studio lighting and procedural meshes.
+                      </li>
+                      <li>
+                        <strong>Unified Modal Ecosystem:</strong> Deep-dive case studies with keyboard arrow navigation, backdrop blur, and full accessibility support.
+                      </li>
+                    </ul>
+                  </div>
+
+                  <div className="info-block">
+                    <h4 className="info-heading">TECH STACK & ARCHITECTURE</h4>
+                    <div className="tech-tags-cloud">
+                      <span>React.js</span>
+                      <span>Vite</span>
+                      <span>Three.js (WebGL)</span>
+                      <span>Framer Motion</span>
+                      <span>Lucide React</span>
+                      <span>CSS Grid & Flexbox</span>
+                      <span>Vercel Edge</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="project-interactive-column">
+                  <div
+                    className="project-preview-frame"
+                    onClick={() => {
+                      setSelectedProject("all-projects-cards");
+                      soundEnabled && luxuryAudio.playTactileClick();
+                    }}
+                    onMouseMove={handleCardTilt}
+                    onMouseLeave={handleCardTiltReset}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        setSelectedProject("all-projects-cards");
+                        soundEnabled && luxuryAudio.playTactileClick();
+                      }
+                    }}
+                    title="Click to view All Projects Cards details"
+                  >
+                    <div className="browser-chrome-bar">
+                      <div className="browser-dots">
+                        <span className="b-dot close" />
+                        <span className="b-dot min" />
+                        <span className="b-dot max" />
+                      </div>
+                      <div className="browser-url-pill">
+                        <span>https://all-projects-sigma.vercel.app</span>
+                      </div>
+                      <div className="browser-action-hint">
+                        <span>View Details ⊕</span>
+                      </div>
+                    </div>
+                    <div className="project-image-wrap">
+                      <img
+                        src="/projects/all-projects-cards.jpg"
+                        alt="All Projects Cards — Interactive Portfolio Showcase Preview"
+                        className="project-showcase-img"
+                        loading="lazy"
+                      />
+                      <div className="project-img-overlay">
+                        <span className="overlay-badge">Click to Explore Details ⊕</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="project-card-footer">
+                <span>EXPLORE LIVE PRODUCTION AT ALL-PROJECTS-SIGMA.VERCEL.APP</span>
+                <span>2026 EDITION · INTERACTIVE ARCHITECTURE</span>
               </div>
             </article>
           </div>
@@ -2063,6 +2223,8 @@ function App() {
                 <span>
                   {selectedProject === "chrezaa"
                     ? "PROJECT / 02 · FULL-STACK E-COMMERCE"
+                    : selectedProject === "all-projects-cards"
+                    ? "PROJECT / 03 · INTERACTIVE SHOWCASE & 3D WEBGL"
                     : "PROJECT / 01 · ALGORITHM VISUALIZATION"}
                 </span>
               </div>
@@ -2180,6 +2342,106 @@ function App() {
                       <span>WhatsApp Cloud API</span>
                       <span>Vite Tooling</span>
                       <span>Netlify Production</span>
+                    </div>
+                  </div>
+                </>
+              ) : selectedProject === "all-projects-cards" ? (
+                <>
+                  <div className="modal-hero-header">
+                    <span className="modal-eyebrow">INTERACTIVE ARCHITECTURE 2026 · PRODUCTION SHOWCASE</span>
+                    <h2 id="modal-project-title" className="modal-title">ALL PROJECTS CARDS</h2>
+                    <p className="modal-lead">
+                      An editorial, multi-tier project showcase and interactive portfolio engine engineered with fluid category filtering, real-time query searching, 3D WebGL simulations, and physics-driven spring tilt interactions.
+                    </p>
+
+                    <div className="modal-cta-row">
+                      <a
+                        href="https://all-projects-sigma.vercel.app/"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="editorial-action-btn primary"
+                        onClick={() => soundEnabled && luxuryAudio.playTactileClick()}
+                      >
+                        <span>View Project</span>
+                        <span className="btn-arrow">↗</span>
+                      </a>
+                      <a
+                        href="https://github.com/ymitesh760-star/All-Project-s-Card-"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="editorial-action-btn secondary"
+                        onClick={() => soundEnabled && luxuryAudio.playTactileClick()}
+                      >
+                        <span>GitHub</span>
+                        <span className="btn-arrow">↗</span>
+                      </a>
+                    </div>
+                  </div>
+
+                  <div className="modal-image-showcase">
+                    <div className="browser-chrome-bar">
+                      <div className="browser-dots">
+                        <span className="b-dot close" />
+                        <span className="b-dot min" />
+                        <span className="b-dot max" />
+                      </div>
+                      <div className="browser-url-pill">
+                        <span>https://all-projects-sigma.vercel.app</span>
+                      </div>
+                      <span className="browser-badge">Live Production</span>
+                    </div>
+                    <img
+                      src="/projects/all-projects-cards.jpg"
+                      alt="All Projects Cards Live Showcase"
+                      className="modal-feature-img"
+                    />
+                  </div>
+
+                  <div className="modal-details-grid">
+                    <div className="modal-detail-card">
+                      <h3 className="modal-card-title">CURATED EDITORIAL ARCHITECTURE</h3>
+                      <p className="modal-card-text">
+                        Engineered to deliver an immersive, fluid showcase for diverse engineering projects:
+                      </p>
+                      <ul className="modal-feature-list">
+                        <li>
+                          <strong>Dynamic Category Engine:</strong> Instant filtering across Web Applications, Interactive Experiences, and Tools with live item count updates.
+                        </li>
+                        <li>
+                          <strong>Live Query Search:</strong> Debounced query processing scanning across titles, subtitles, tech stacks, and descriptive metadata.
+                        </li>
+                        <li>
+                          <strong>Unified Modal Ecosystem:</strong> Deep-dive case studies with keyboard shortcuts (Arrow navigation, Escape dismissal) and backdrop blur.
+                        </li>
+                      </ul>
+                    </div>
+
+                    <div className="modal-detail-card">
+                      <h3 className="modal-card-title">MOTION PHYSICS & 3D GRAPHICS</h3>
+                      <ul className="modal-feature-list">
+                        <li>
+                          <strong>Spring-Driven 3D Tilt:</strong> Pointer-reactive card tilt physics computing angular offsets with damped spring kinematics.
+                        </li>
+                        <li>
+                          <strong>3D WebGL Simulation:</strong> Embedded Three.js tactical scenes, ambient lighting, and procedural mesh geometry.
+                        </li>
+                        <li>
+                          <strong>Tactile Micro-Interactions:</strong> Fluid hover transitions, status indicators, and responsive touch-first optimizations.
+                        </li>
+                      </ul>
+                    </div>
+                  </div>
+
+                  <div className="modal-tech-section">
+                    <h4 className="info-heading">VERIFIED TECH STACK</h4>
+                    <div className="tech-tags-cloud">
+                      <span>React.js</span>
+                      <span>Vite</span>
+                      <span>Three.js (WebGL)</span>
+                      <span>Framer Motion</span>
+                      <span>Lucide React</span>
+                      <span>CSS Grid & Flexbox</span>
+                      <span>Vercel Edge</span>
                     </div>
                   </div>
                 </>
